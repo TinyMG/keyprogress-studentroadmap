@@ -1,0 +1,23 @@
+node_modules
+dist
+.env
+.env.local
+.DS_Store
+*.log
+
+# build / tooling
+.vite
+*.local
+*.tsbuildinfo
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# os
+Thumbs.db
+
+# supabase local
+supabase/.branches
+supabase/.temp
