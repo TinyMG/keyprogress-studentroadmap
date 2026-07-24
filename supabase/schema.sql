@@ -47,3 +47,19 @@ create policy "student_books owner all" on student_books
     exists (select 1 from students s
             where s.id = student_id and s.teacher_id = auth.uid())
   );
+
+-- Stamp teacher_id from the authenticated session on every insert.
+-- Trust boundary: the DB owns "who this row belongs to", the client never
+-- sends teacher_id. RLS WITH CHECK then passes because the value is set.
+create or replace function set_students_teacher_id()
+returns trigger as $$
+begin
+  new.teacher_id := auth.uid();
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists students_set_teacher_id on students;
+create trigger students_set_teacher_id
+  before insert on students
+  for each row execute function set_students_teacher_id();
