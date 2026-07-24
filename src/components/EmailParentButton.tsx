@@ -3,6 +3,7 @@ import { SERIES_BY_ID } from "../data/books";
 import { nextBookSuggestion, type Progress } from "../logic/progress";
 import { sendNextBookEmail } from "../lib/email";
 import type { Student } from "../lib/supabase";
+import { errorMessage } from "../lib/error";
 
 type Props = {
   student: Student;
@@ -34,7 +35,7 @@ export default function EmailParentButton({ student, progress, teacherEmail }: P
       });
       setMsg("Email sent to parent.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }

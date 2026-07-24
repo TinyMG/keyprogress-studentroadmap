@@ -5,6 +5,7 @@ import {
   listStudents,
   type Student,
 } from "../lib/supabase";
+import { errorMessage } from "../lib/error";
 
 type Props = {
   onSelect: (student: Student) => void;
@@ -26,7 +27,7 @@ export default function StudentList({ onSelect }: Props) {
     try {
       setStudents(await listStudents());
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -47,7 +48,7 @@ export default function StudentList({ onSelect }: Props) {
       setShowAdd(false);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }

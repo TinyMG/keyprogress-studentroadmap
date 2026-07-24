@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
+import { errorMessage } from "../lib/error";
 
 export default function Auth() {
   const [email, setEmail] = useState("");
@@ -22,7 +23,7 @@ export default function Auth() {
         setError("Check your inbox to confirm the account, then sign in.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }

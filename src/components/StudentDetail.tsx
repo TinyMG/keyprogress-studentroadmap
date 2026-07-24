@@ -8,6 +8,7 @@ import {
   setBookCompleted,
   type Student,
 } from "../lib/supabase";
+import { errorMessage } from "../lib/error";
 
 type Props = {
   student: Student;
@@ -32,7 +33,7 @@ export default function StudentDetail({ student, teacherEmail, onBack }: Props) 
       setCompleted(ids);
       setProgress(deriveProgress(student.series_id, ids));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -54,7 +55,7 @@ export default function StudentDetail({ student, teacherEmail, onBack }: Props) 
     try {
       await setBookCompleted(student.id, bookId, !wasDone);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
       void load(); // revert
     } finally {
       setBusy(false);
