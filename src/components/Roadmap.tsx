@@ -47,41 +47,58 @@ export default function Roadmap({ nodes, seriesName, onToggle, canEdit }: Props)
         </span>
       </div>
 
-      <ol className="relative">
-        {nodes.map((n, i) => {
-          const last = i === nodes.length - 1;
-          const next = nodes[i + 1];
-          return (
-            <li key={n.bookId} className="relative flex items-start gap-4 pb-8 last:pb-0">
-              {/* connector line to next node */}
-              {!last && (
-                <span
-                  className={`absolute left-5 top-10 h-[calc(100%-2.5rem)] w-0.5 ${CONNECTOR[next.status] ?? "bg-slate-200"}`}
-                  aria-hidden
-                />
-              )}
-              {/* node */}
-              <button
-                type="button"
-                disabled={!canEdit}
-                onClick={() => onToggle?.(n.bookId)}
-                className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-sm font-semibold transition ${STATUS_STYLES[n.status]} ${canEdit ? "cursor-pointer hover:scale-105" : "cursor-default"}`}
-                aria-label={`${n.title} — ${STATUS_LABEL[n.status]}${canEdit ? ". Click to toggle." : ""}`}
-                title={STATUS_LABEL[n.status]}
+      {/* horizontal scroll: 8 covers + nodes don't fit on one screen */}
+      <div className="overflow-x-auto pb-4">
+        <ol className="flex snap-x">
+          {nodes.map((n, i) => {
+            const last = i === nodes.length - 1;
+            const next = nodes[i + 1];
+            return (
+              <li
+                key={n.bookId}
+                className="flex w-28 shrink-0 snap-start flex-col items-center gap-2"
               >
-                {n.status === "done" ? "✓" : i + 1}
-              </button>
-              {/* label */}
-              <div className="pt-1.5">
-                <p className={`font-medium ${n.status === "todo" ? "text-slate-400" : "text-slate-900"}`}>
-                  {n.title}
-                </p>
-                <p className="text-xs text-slate-500">{STATUS_LABEL[n.status]}</p>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
+                {/* ponytail: placeholder cover, swap src -> /books/${n.bookId}.png when real assets land */}
+                <img
+                  src={`https://placehold.co/160x200/e2e8f0/475569?text=${encodeURIComponent(n.title)}`}
+                  alt={`${n.title} cover`}
+                  loading="lazy"
+                  className={`h-28 w-20 rounded-md border border-slate-200 object-cover ${
+                    n.status === "todo" ? "opacity-60 grayscale" : ""
+                  }`}
+                />
+                {/* circle + horizontal connector to next node */}
+                <div className="relative flex w-full justify-center">
+                  {!last && (
+                    <span
+                      className={`absolute left-1/2 top-1/2 h-0.5 w-full -translate-y-1/2 ${
+                        CONNECTOR[next.status] ?? "bg-slate-200"
+                      }`}
+                      aria-hidden
+                    />
+                  )}
+                  <button
+                    type="button"
+                    disabled={!canEdit}
+                    onClick={() => onToggle?.(n.bookId)}
+                    className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-sm font-semibold transition ${STATUS_STYLES[n.status]} ${canEdit ? "cursor-pointer hover:scale-105" : "cursor-default"}`}
+                    aria-label={`${n.title} — ${STATUS_LABEL[n.status]}${canEdit ? ". Click to toggle." : ""}`}
+                    title={STATUS_LABEL[n.status]}
+                  >
+                    {n.status === "done" ? "✓" : i + 1}
+                  </button>
+                </div>
+                <div className="text-center">
+                  <p className={`font-medium ${n.status === "todo" ? "text-slate-400" : "text-slate-900"}`}>
+                    {n.title}
+                  </p>
+                  <p className="text-xs text-slate-500">{STATUS_LABEL[n.status]}</p>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
     </div>
   );
 }
