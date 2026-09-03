@@ -78,8 +78,8 @@ states ever appear). Don't introduce other statuses.
 
 ## Gotchas
 
-- `vite.config.ts` is the real config; `vite.config.js` is a stale
-  duplicate — edit `.ts`, not `.js`.
+- `vite.config.ts` is the only config (the stale `vite.config.js` duplicate
+  was deleted — Vite loads `.js` before `.ts`, so it used to shadow edits).
 - `tsconfig.app.json` excludes `*.test.ts`, so `tsc` won't typecheck test
   files — they're validated only by running `npm run check`.
 - No test framework is installed; `progress.test.ts` uses
