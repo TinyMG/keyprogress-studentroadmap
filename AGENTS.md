@@ -1,32 +1,89 @@
-# Ponytail, lazy senior dev mode
+# KeyProgress — agent notes
 
-You are a lazy senior developer. Lazy means efficient, not careless. The best code is the code never written.
+Single-page app: Vite + React 18 + TypeScript + Tailwind. Music teachers
+track students through piano book series. No backend server — Supabase
+(Postgres + RLS + email auth) for DB/auth, EmailJS for client-side email.
 
-Before writing any code, stop at the first rung that holds:
+## Working mode
 
-1. Does this need to be built at all? (YAGNI)
-2. Does it already exist in this codebase? Reuse the helper, util, or pattern that's already here, don't re-write it.
-3. Does the standard library already do this? Use it.
-4. Does a native platform feature cover it? Use it.
-5. Does an already-installed dependency solve it? Use it.
-6. Can this be one line? Make it one line.
-7. Only then: write the minimum code that works.
+Ponytail (lazy-senior) is active via the `@dietrichgebert/ponytail`
+opencode plugin. Defaults: shortest working diff, reuse before re-write,
+no unrequested abstractions, no new deps. Mark deliberate shortcuts with
+a `ponytail:` comment naming the ceiling + upgrade path. Don't strip
+existing `ponytail:` notes — they're the debt ledger.
 
-The ladder runs after you understand the problem, not instead of it: read the task and the code it touches, trace the real flow end to end, then climb.
+## Commands
 
-Bug fix = root cause, not symptom: a report names a symptom. Grep every caller of the function you touch and fix the shared function once — one guard there is a smaller diff than one per caller, and patching only the path the ticket names leaves a sibling caller still broken.
+```
+npm run dev       # vite dev server
+npm run build     # tsc -b && vite build  — THIS is the typecheck+build;
+                  #   fails on any TS error. No separate lint/typecheck.
+npm run check     # node --experimental-strip-types src/logic/progress.test.ts
+                  #   the ONLY test; Node 24+ strips TS natively, no framework.
+```
 
-Rules:
+No lint script, no eslint/prettier, no CI workflow. Don't assume one.
+`npm run build` is the gate: `tsc -b` (project refs) runs before
+`vite build`, so type errors block the build. Run it before declaring done.
 
-- No abstractions that weren't explicitly requested.
-- No new dependency if it can be avoided.
-- No boilerplate nobody asked for.
-- Deletion over addition. Boring over clever. Fewest files possible.
-- Shortest working diff wins, but only once you understand the problem. The smallest change in the wrong place isn't lazy, it's a second bug.
-- Question complex requests: "Do you actually need X, or does Y cover it?"
-- Pick the edge-case-correct option when two stdlib approaches are the same size, lazy means less code, not the flimsier algorithm.
-- Mark deliberate simplifications that cut a real corner with a known ceiling (global lock, O(n²) scan, naive heuristic) with a `ponytail:` comment naming the ceiling and upgrade path.
+## Env
 
-Not lazy about: understanding the problem (read it fully and trace the real flow before picking a rung, a small diff you don't understand is just laziness dressed up as efficiency), input validation at trust boundaries, error handling that prevents data loss, security, accessibility, the calibration real hardware needs (the platform is never the spec ideal, a clock drifts, a sensor reads off), anything explicitly requested. Lazy code without its check is unfinished: non-trivial logic leaves ONE runnable check behind, the smallest thing that fails if the logic breaks (an assert-based demo/self-check or one small test file; no frameworks, no fixtures). Trivial one-liners need no test.
+All vars are `VITE_*` (Vite), read via `import.meta.env` — never
+`process.env`. See `.env.example`:
+`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`,
+`VITE_EMAILJS_SERVICE_ID`, `VITE_EMAILJS_TEMPLATE_ID`,
+`VITE_EMAILJS_PUBLIC_KEY`.
 
-(Yes, this file also applies to agents working on the ponytail repo itself. Especially to them.)
+## Architecture
+
+- `src/App.tsx` — root; gates on Supabase session, renders `Auth` or
+  `StudentList` / `StudentDetail`.
+- `src/lib/supabase.ts` — all DB calls + `Student`/`StudentBookRow` types.
+  Silently no-ops without env (warns, doesn't crash at module load);
+  don't "fix" the empty-string client.
+- `src/lib/email.ts` — EmailJS client-side send (200/mo free tier).
+- `src/lib/error.ts` — `errorMessage(err)`: coerces Supabase errors
+  (plain objects with `.message`, NOT `Error`) to string. REUSE this;
+  `String(err)` renders `[object Object]`.
+- `src/logic/progress.ts` — `deriveProgress`, pure, the one non-trivial
+  logic. Self-check lives in `progress.test.ts`.
+- `src/data/books.ts` — series as a static const (4 series). Don't add a
+  books DB table; `ponytail:` note says migrate only when the school
+  needs editable series.
+- `supabase/schema.sql` — DB schema + RLS. Run in Supabase SQL editor;
+  no migration tool.
+
+## Security boundary (important)
+
+RLS, not app code, enforces "each teacher sees only their own students."
+A `before insert` trigger stamps `teacher_id` from `auth.uid()` — the
+CLIENT NEVER sends `teacher_id`. If you add a column to `students` or a
+new table, add/match the RLS policy or rows become invisible. Re-run
+`supabase/schema.sql` in the Supabase SQL editor after schema changes.
+
+`student_books`: presence = completed, absence = not done. `status` is
+always `'completed'` (`ponytail:` note: collapse the column if no other
+states ever appear). Don't introduce other statuses.
+
+## Conventions
+
+- Error display in components:
+  `try { ... } catch (err) { setError(errorMessage(err)) }`.
+- Optimistic UI then revert-on-error via reload (see `StudentDetail.toggle`).
+- Tailwind palette: `brand-500/600/700` + `done`/`current`/`goal`
+  semantic colors (`tailwind.config.js`). Use these, don't invent new ones.
+- Non-trivial new logic gets a runnable self-check (assert-based
+  `*.test.ts` run via `node --experimental-strip-types`), not a test
+  framework. Trivial one-liners need no test.
+
+## Gotchas
+
+- `vite.config.ts` is the real config; `vite.config.js` is a stale
+  duplicate — edit `.ts`, not `.js`.
+- `tsconfig.app.json` excludes `*.test.ts`, so `tsc` won't typecheck test
+  files — they're validated only by running `npm run check`.
+- No test framework is installed; `progress.test.ts` uses
+  `node:assert/strict` and imports `./progress.ts` with the `.ts`
+  extension (Node 24 native type stripping).
+- Deploy = `npm run build` → `dist/` → Cloudflare Pages (set env vars in
+  the dashboard). No CI.
