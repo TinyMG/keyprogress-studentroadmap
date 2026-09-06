@@ -1,30 +1,20 @@
-export type View =
-  | "dashboard"
-  | "students"
-  | "student"
-  | "curriculum"
-  | "roadmap"
-  | "resources";
+import { visibleNav, type View, type Role } from "../logic/roles";
+
+export type { View };
 
 type Props = {
   current: View;
   onNavigate: (v: View) => void;
   teacherEmail: string;
+  role: Role;
   onSignOut: () => void;
 };
-
-const NAV: { id: View; label: string }[] = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "students", label: "Students" },
-  { id: "curriculum", label: "Curriculum" },
-  { id: "roadmap", label: "Skill Pathway" },
-  { id: "resources", label: "Resources" },
-];
 
 export default function Sidebar({
   current,
   onNavigate,
   teacherEmail,
+  role,
   onSignOut,
 }: Props) {
   return (
@@ -40,7 +30,7 @@ export default function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-1 p-3">
-        {NAV.map((item) => (
+        {visibleNav(role).map((item) => (
           <button
             key={item.id}
             onClick={() => onNavigate(item.id)}

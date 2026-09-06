@@ -45,6 +45,7 @@ const MASTERY_COLORS: Record<MasteryLevel, string> = {
 type Props = {
   student: Student;
   teacherEmail: string;
+  readOnly: boolean;
   onBack: () => void;
 };
 
@@ -53,6 +54,7 @@ type Tab = "resources" | "history" | "notes" | "profile";
 export default function StudentDetail({
   student,
   teacherEmail,
+  readOnly,
   onBack,
 }: Props) {
   const [tab, setTab] = useState<Tab>("resources");
@@ -125,6 +127,7 @@ export default function StudentDetail({
   }
 
   async function toggleBook(bookId: string) {
+    if (readOnly) return;
     const wasDone = completed.includes(bookId);
     const next = wasDone
       ? completed.filter((id) => id !== bookId)
@@ -272,7 +275,11 @@ export default function StudentDetail({
 
       {/* Tabs */}
       <div className="mb-6 flex gap-1 border-b border-slate-200">
-        {(["resources", "history", "notes", "profile"] as Tab[]).map((t) => (
+        {(
+          ["resources", "history", "notes", "profile"] as Tab[]
+        )
+          .filter((t) => !(readOnly && t === "profile"))
+          .map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -306,7 +313,7 @@ export default function StudentDetail({
                         : n.status === "current"
                           ? "border-current bg-current text-white"
                           : "border-slate-300 bg-white text-slate-400"
-                    }`}
+                    } ${readOnly ? "cursor-default" : ""}`}
                     title={n.title}
                   >
                     {n.status === "done" ? "✓" : i + 1}
@@ -320,12 +327,14 @@ export default function StudentDetail({
             <h2 className="text-lg font-semibold text-slate-900">
               Assigned Resources
             </h2>
-            <button
-              onClick={() => setShowAddRes((s) => !s)}
-              className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
-            >
-              {showAddRes ? "Cancel" : "Add Resource"}
-            </button>
+            {!readOnly && (
+              <button
+                onClick={() => setShowAddRes((s) => !s)}
+                className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
+              >
+                {showAddRes ? "Cancel" : "Add Resource"}
+              </button>
+            )}
           </div>
 
           {showAddRes && (
@@ -389,7 +398,7 @@ export default function StudentDetail({
                         )}
                       </div>
                       <div className="flex shrink-0 gap-2">
-                        {sr?.status !== "complete" && (
+                        {!readOnly && sr?.status !== "complete" && (
                           <button
                             onClick={() => handleComplete(r.id)}
                             className="text-sm font-medium text-done hover:underline"
@@ -397,33 +406,44 @@ export default function StudentDetail({
                             Complete
                           </button>
                         )}
-                        <button
-                          onClick={() => handleUnassign(r.id)}
-                          className="text-sm font-medium text-red-500 hover:underline"
-                        >
-                          Remove
-                        </button>
+                        {!readOnly && (
+                          <button
+                            onClick={() => handleUnassign(r.id)}
+                            className="text-sm font-medium text-red-500 hover:underline"
+                          >
+                            Remove
+                          </button>
+                        )}
                       </div>
                     </div>
-                    {sr?.status !== "complete" && (
-                      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                        <span className="text-xs font-medium text-slate-500">
-                          Mastery:
-                        </span>
-                        {MASTERY_LEVELS.map((level) => (
-                          <button
-                            key={level}
-                            onClick={() => handleMasteryChange(r.id, level)}
-                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition ${
-                              mastery === level
-                                ? MASTERY_COLORS[level] + " ring-2 ring-offset-1"
-                                : "bg-slate-50 text-slate-400 hover:bg-slate-100"
-                            }`}
-                          >
-                            {level}
-                          </button>
-                        ))}
-                      </div>
+                    {readOnly ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Mastery: {mastery}
+                      </p>
+                    ) : (
+                      sr?.status !== "complete" && (
+                        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs font-medium text-slate-500">
+                            Mastery:
+                          </span>
+                          {MASTERY_LEVELS.map((level) => (
+                            <button
+                              key={level}
+                              onClick={() =>
+                                handleMasteryChange(r.id, level)
+                              }
+                              className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition ${
+                                mastery === level
+                                  ? MASTERY_COLORS[level] +
+                                    " ring-2 ring-offset-1"
+                                  : "bg-slate-50 text-slate-400 hover:bg-slate-100"
+                              }`}
+                            >
+                              {level}
+                            </button>
+                          ))}
+                        </div>
+                      )
                     )}
                   </li>
                 );
@@ -431,7 +451,7 @@ export default function StudentDetail({
             </ul>
           )}
 
-          {progress && (
+          {progress && !readOnly && (
             <div className="mt-6">
               <EmailParentButton
                 student={student}
@@ -479,22 +499,24 @@ export default function StudentDetail({
       {/* Notes tab */}
       {tab === "notes" && (
         <div className="space-y-4">
-          <form onSubmit={handleAddNote} className="space-y-2">
-            <textarea
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              placeholder="Add a lesson note…"
-              rows={3}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
-            />
-            <button
-              type="submit"
-              disabled={noteBusy || !noteText.trim()}
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
-            >
-              {noteBusy ? "…" : "Add note"}
-            </button>
-          </form>
+          {!readOnly && (
+            <form onSubmit={handleAddNote} className="space-y-2">
+              <textarea
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                placeholder="Add a lesson note…"
+                rows={3}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+              />
+              <button
+                type="submit"
+                disabled={noteBusy || !noteText.trim()}
+                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+              >
+                {noteBusy ? "…" : "Add note"}
+              </button>
+            </form>
+          )}
 
           {notes.length === 0 ? (
             <p className="text-sm text-slate-500">No lesson notes yet.</p>

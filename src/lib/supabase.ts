@@ -16,6 +16,8 @@ export const supabase = createClient(url ?? "", anon ?? "");
 
 export type Student = {
   id: string;
+  teacher_id: string;
+  auth_user_id: string | null;
   name: string;
   parent_email: string | null;
   series_id: string;
@@ -86,11 +88,53 @@ export type LessonNote = {
   created_at: string;
 };
 
+export type Role = "admin" | "teacher" | "student";
+
+export type Profile = {
+  id: string;
+  email: string;
+  role: Role;
+};
+
+// ===== Profile queries (roles) =====
+
+export async function fetchProfile(userId: string): Promise<Profile> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, role")
+    .eq("id", userId)
+    .single();
+  if (error) throw error;
+  return data as Profile;
+}
+
+// Admin-only via RLS: returns every account (Teachers tab, and the
+// teacher/login pickers in the student editor).
+export async function listProfiles(): Promise<Profile[]> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, role")
+    .order("email", { ascending: true });
+  if (error) throw error;
+  return data as Profile[];
+}
+
+export async function updateProfileRole(
+  id: string,
+  role: Role,
+): Promise<void> {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ role })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 // ===== Student queries (expanded) =====
 
 const STUDENT_COLS =
-  "id, name, parent_email, series_id, created_at, " +
-  "age, date_of_birth, parent_name, phone, address, " +
+  "id, teacher_id, auth_user_id, name, parent_email, series_id, " +
+  "created_at, age, date_of_birth, parent_name, phone, address, " +
   "is_adult, stage_id, date_entered_stage, " +
   "lesson_focus, general_notes, sub_notes";
 
@@ -117,14 +161,27 @@ export async function createStudent(
   name: string,
   seriesId: string,
   parentEmail: string | null,
+  opts: { teacherId?: string } = {},
 ): Promise<Student> {
   const { data, error } = await supabase
     .from("students")
-    .insert({ name, series_id: seriesId, parent_email: parentEmail })
+    .insert({
+      name,
+      series_id: seriesId,
+      parent_email: parentEmail,
+      // Only admins send teacher_id; the DB trigger stamps auth.uid()
+      // when it's absent (teacher path). RLS rejects bad values.
+      ...(opts.teacherId ? { teacher_id: opts.teacherId } : {}),
+    })
     .select(STUDENT_COLS)
     .single();
   if (error) throw error;
   return data as unknown as Student;
+}
+
+export async function deleteStudent(id: string): Promise<void> {
+  const { error } = await supabase.from("students").delete().eq("id", id);
+  if (error) throw error;
 }
 
 export async function updateStudent(
@@ -195,6 +252,40 @@ export async function listStages(): Promise<Stage[]> {
   return data as Stage[];
 }
 
+// Admin-only writes (RLS-enforced).
+export type StageFields = {
+  stage_number: number;
+  name: string;
+  description: string | null;
+  color: string | null;
+};
+
+export async function createStage(fields: StageFields): Promise<void> {
+  const { error } = await supabase
+    .from("curriculum_stages")
+    .insert(fields);
+  if (error) throw error;
+}
+
+export async function updateStage(
+  id: string,
+  fields: Partial<StageFields>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("curriculum_stages")
+    .update(fields)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteStage(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("curriculum_stages")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
 // ===== Resource queries =====
 
 export async function listResources(
@@ -210,6 +301,44 @@ export async function listResources(
   const { data, error } = await q;
   if (error) throw error;
   return data as Resource[];
+}
+
+// Admin-only writes (RLS-enforced).
+export type ResourceFields = {
+  name: string;
+  description: string | null;
+  category: ResourceCategory;
+  author: string | null;
+  purchase_link: string | null;
+  stage_id: string | null;
+};
+
+export async function createResource(
+  fields: ResourceFields,
+): Promise<void> {
+  const { error } = await supabase
+    .from("approved_resources")
+    .insert(fields);
+  if (error) throw error;
+}
+
+export async function updateResource(
+  id: string,
+  fields: Partial<ResourceFields>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("approved_resources")
+    .update(fields)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteResource(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("approved_resources")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
 }
 
 // ===== Student-resource assignment =====

@@ -11,9 +11,10 @@ import { errorMessage } from "../lib/error";
 
 type Props = {
   onSelect: (student: Student) => void;
+  canEdit?: boolean;
 };
 
-export default function StudentList({ onSelect }: Props) {
+export default function StudentList({ onSelect, canEdit = true }: Props) {
   const [students, setStudents] = useState<Student[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,12 +88,14 @@ export default function StudentList({ onSelect }: Props) {
             {students.length} enrolled student{students.length === 1 ? "" : "s"}
           </p>
         </div>
-        <button
-          onClick={() => setShowAdd((s) => !s)}
-          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
-        >
-          {showAdd ? "Cancel" : "Add Student"}
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setShowAdd((s) => !s)}
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+          >
+            {showAdd ? "Cancel" : "Add Student"}
+          </button>
+        )}
       </div>
 
       {showAdd && (
