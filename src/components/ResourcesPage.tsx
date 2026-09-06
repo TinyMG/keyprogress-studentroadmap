@@ -5,6 +5,7 @@ import {
   type ResourceCategory,
 } from "../lib/supabase";
 import { errorMessage } from "../lib/error";
+import VideoPlayer from "./VideoPlayer";
 
 const CATEGORIES: (ResourceCategory | "All")[] = [
   "All",
@@ -94,28 +95,50 @@ export default function ResourcesPage() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((r) => (
-          <div
-            key={r.id}
-            className="rounded-xl border border-slate-200 bg-white p-4"
-          >
-            <div className="mb-2 flex items-start justify-between gap-2">
-              <p className="font-medium text-slate-900">{r.name}</p>
-              <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
-                {r.category}
-              </span>
-            </div>
-            {r.author && (
-              <p className="mb-1 text-xs text-slate-400">{r.author}</p>
-            )}
-            {r.description && (
-              <p className="text-sm text-slate-500">{r.description}</p>
-            )}
-          </div>
+          <ResourceCard key={r.id} resource={r} />
         ))}
       </div>
 
       {filtered.length === 0 && (
         <p className="text-slate-500">No resources found.</p>
+      )}
+    </div>
+  );
+}
+
+function ResourceCard({ resource: r }: { resource: Resource }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      key={r.id}
+      className="rounded-xl border border-slate-200 bg-white p-4"
+    >
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <p className="font-medium text-slate-900">{r.name}</p>
+        <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
+          {r.category}
+        </span>
+      </div>
+      {r.author && (
+        <p className="mb-1 text-xs text-slate-400">{r.author}</p>
+      )}
+      {r.description && (
+        <p className="text-sm text-slate-500">{r.description}</p>
+      )}
+      {r.video_url && (
+        <div className="mt-3">
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-700"
+          >
+            {open ? "Hide video" : "▶ Watch video"}
+          </button>
+          {open && (
+            <div className="mt-3">
+              <VideoPlayer url={r.video_url} />
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

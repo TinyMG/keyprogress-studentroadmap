@@ -15,6 +15,7 @@ import {
   createResource,
   updateResource,
   deleteResource,
+  uploadResourceVideo,
   type Student,
   type Stage,
   type Resource,
@@ -23,6 +24,7 @@ import {
   type Role,
 } from "../lib/supabase";
 import { errorMessage } from "../lib/error";
+import VideoPlayer from "./VideoPlayer";
 
 const inputCls =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm " +
@@ -708,6 +710,7 @@ type ResourceDraft = {
   purchase_link: string;
   description: string;
   stage_id: string;
+  video_link: string;
 };
 
 const EMPTY_RESOURCE: ResourceDraft = {
@@ -717,6 +720,7 @@ const EMPTY_RESOURCE: ResourceDraft = {
   purchase_link: "",
   description: "",
   stage_id: "",
+  video_link: "",
 };
 
 function ResourcesTab() {
@@ -729,6 +733,7 @@ function ResourcesTab() {
   const [editId, setEditId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [stageFilter, setStageFilter] = useState("all");
+  const [videoFile, setVideoFile] = useState<File | null>(null);
 
   async function load() {
     setLoading(true);
@@ -767,14 +772,20 @@ function ResourcesTab() {
     setBusy(true);
     setError(null);
     try {
+      // Upload first: a failed upload must not leave a row pointing
+      // at nothing (or vice versa).
+      let videoUrl: string | null = draft.video_link.trim() || null;
+      if (videoFile) videoUrl = await uploadResourceVideo(videoFile);
+      const fields = { ...toFields(draft), video_url: videoUrl };
       if (editId) {
-        await updateResource(editId, toFields(draft));
+        await updateResource(editId, fields);
       } else {
-        await createResource(toFields(draft));
+        await createResource(fields);
       }
       setDraft(EMPTY_RESOURCE);
       setEditId(null);
       setShowAdd(false);
+      setVideoFile(null);
       await load();
     } catch (err) {
       setError(errorMessage(err));
@@ -796,6 +807,7 @@ function ResourcesTab() {
   function startEdit(r: Resource) {
     setEditId(r.id);
     setShowAdd(false);
+    setVideoFile(null);
     setDraft({
       name: r.name,
       category: r.category,
@@ -803,6 +815,7 @@ function ResourcesTab() {
       purchase_link: r.purchase_link ?? "",
       description: r.description ?? "",
       stage_id: r.stage_id ?? "",
+      video_link: r.video_url ?? "",
     });
   }
 
@@ -912,6 +925,62 @@ function ResourcesTab() {
           className={inputCls}
         />
       </div>
+      <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <p className="text-sm font-medium text-slate-700">
+          Learning video
+        </p>
+        {draft.video_link && (
+          <div className="mb-2">
+            <VideoPlayer url={draft.video_link} />
+          </div>
+        )}
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">
+            Video link (YouTube, Vimeo, or direct URL)
+          </label>
+          <input
+            type="url"
+            placeholder="https://…"
+            value={draft.video_link}
+            onChange={(e) =>
+              setDraft({ ...draft, video_link: e.target.value })
+            }
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">
+            …or attach a video file (mp4/webm, max 50 MB)
+          </label>
+          <input
+            type="file"
+            accept="video/*"
+            onChange={(e) => setVideoFile(e.target.files?.[0] ?? null)}
+            className="block w-full text-sm text-slate-600
+              file:mr-3 file:rounded-lg file:border-0
+              file:bg-brand-600 file:px-3 file:py-2
+              file:text-sm file:font-semibold file:text-white
+              hover:file:bg-brand-700"
+          />
+          {videoFile && (
+            <p className="mt-1 text-xs text-slate-500">
+              Selected: {videoFile.name} (replaces any link above)
+            </p>
+          )}
+        </div>
+        {editId && draft.video_link && (
+          <button
+            type="button"
+            onClick={() => {
+              setDraft({ ...draft, video_link: "" });
+              setVideoFile(null);
+            }}
+            className="text-sm font-medium text-red-500 hover:underline"
+          >
+            Remove video
+          </button>
+        )}
+      </div>
       <button type="submit" disabled={busy} className={btnCls}>
         {busy ? "Saving…" : "Save"}
       </button>
@@ -926,6 +995,7 @@ function ResourcesTab() {
             setShowAdd((s) => !s);
             setEditId(null);
             setDraft(EMPTY_RESOURCE);
+            setVideoFile(null);
           }}
           className={btnCls}
         >
@@ -959,6 +1029,11 @@ function ResourcesTab() {
                     <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
                       {r.category}
                     </span>
+                    {r.video_url && (
+                      <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+                        ▶ video
+                      </span>
+                    )}
                     {r.stage_id && (
                       <span className="text-xs text-slate-400">
                         {stageName(r.stage_id)}

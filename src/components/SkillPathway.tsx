@@ -21,6 +21,7 @@ import {
 } from "../data/pathway";
 import { SERIES_BY_ID } from "../data/books";
 import { errorMessage } from "../lib/error";
+import VideoPlayer from "./VideoPlayer";
 
 const STATUS_DOTS: Record<MasteryLevel, string> = {
   "Not Introduced": "bg-slate-400",
@@ -347,6 +348,13 @@ export default function SkillPathway({ onSelect }: Props) {
             dialogNode.kind === "stage" ? stageName(dialogNode) : undefined
           }
           view={view[dialogNode.id]}
+          videoUrl={
+            (dialogNode.resourceName &&
+              resources.find(
+                (r) => r.name === dialogNode.resourceName,
+              )?.video_url) ||
+            null
+          }
           onClose={() => setDialogNode(null)}
         />
       )}
@@ -383,11 +391,13 @@ function NodeDialog({
   node,
   stageName,
   view,
+  videoUrl,
   onClose,
 }: {
   node: PathwayNode;
   stageName?: string;
   view: PathwayViewState;
+  videoUrl?: string | null;
   onClose: () => void;
 }) {
   return (
@@ -452,6 +462,12 @@ function NodeDialog({
               {node.resourceName}
             </span>
           </p>
+        )}
+
+        {videoUrl && (
+          <div className="mt-4">
+            <VideoPlayer url={videoUrl} />
+          </div>
         )}
       </div>
     </div>

@@ -251,6 +251,10 @@ create unique index if not exists students_auth_user_id_key
 drop policy if exists "students owner or admin" on students;
 drop policy if exists "students owner all" on students;
 drop policy if exists "students self read" on students;
+drop policy if exists "students select" on students;
+drop policy if exists "students insert" on students;
+drop policy if exists "students update" on students;
+drop policy if exists "students delete" on students;
 create policy "students select" on students
   for select
   using (
@@ -371,3 +375,25 @@ alter table approved_resources
   add constraint approved_resources_stage_id_fkey
   foreign key (stage_id) references curriculum_stages(id)
   on delete set null;
+
+-- ===== Resource videos =====
+-- video_url holds either an external link (YouTube/Vimeo) or a
+-- resource-videos storage public URL.
+
+alter table approved_resources add column if not exists video_url text;
+
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('resource-videos', 'resource-videos', true, 52428800)
+on conflict (id) do nothing;
+
+-- ponytail: public bucket + 50MB cap � free tier has 1GB total, long
+-- lessons should be YouTube links. If quota bites, raise the limit or
+-- move to signed URLs / external hosting.
+drop policy if exists "videos public read" on storage.objects;
+create policy "videos public read" on storage.objects
+  for select using (bucket_id = 'resource-videos');
+
+drop policy if exists "videos authed upload" on storage.objects;
+create policy "videos authed upload" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'resource-videos');

@@ -25,6 +25,7 @@ import {
   type MasteryLevel,
 } from "../lib/supabase";
 import { errorMessage } from "../lib/error";
+import VideoPlayer from "./VideoPlayer";
 
 const MASTERY_LEVELS: MasteryLevel[] = [
   "Not Introduced",
@@ -75,6 +76,9 @@ export default function StudentDetail({
   const [notes, setNotes] = useState<LessonNote[]>([]);
   const [noteText, setNoteText] = useState("");
   const [noteBusy, setNoteBusy] = useState(false);
+
+  // Inline video player on assigned resources
+  const [openVideo, setOpenVideo] = useState<string | null>(null);
 
   // Profile tab state
   const [stages, setStages] = useState<Stage[]>([]);
@@ -398,6 +402,18 @@ export default function StudentDetail({
                         )}
                       </div>
                       <div className="flex shrink-0 gap-2">
+                        {r.video_url && (
+                          <button
+                            onClick={() =>
+                              setOpenVideo((v) =>
+                                v === r.id ? null : r.id,
+                              )
+                            }
+                            className="text-sm font-medium text-violet-600 hover:underline"
+                          >
+                            {openVideo === r.id ? "Hide" : "▶ Watch"}
+                          </button>
+                        )}
                         {!readOnly && sr?.status !== "complete" && (
                           <button
                             onClick={() => handleComplete(r.id)}
@@ -444,6 +460,11 @@ export default function StudentDetail({
                           ))}
                         </div>
                       )
+                    )}
+                    {openVideo === r.id && r.video_url && (
+                      <div className="mt-3">
+                        <VideoPlayer url={r.video_url} />
+                      </div>
                     )}
                   </li>
                 );

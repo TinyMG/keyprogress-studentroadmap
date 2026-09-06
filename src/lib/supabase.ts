@@ -57,6 +57,7 @@ export type Resource = {
   author: string | null;
   purchase_link: string | null;
   stage_id: string | null;
+  video_url: string | null;
 };
 
 export type MasteryLevel =
@@ -294,13 +295,16 @@ export async function listResources(
 ): Promise<Resource[]> {
   let q = supabase
     .from("approved_resources")
-    .select("id, name, description, category, author, purchase_link, stage_id")
+    .select(
+      "id, name, description, category, author, purchase_link, " +
+        "stage_id, video_url",
+    )
     .order("name", { ascending: true });
   if (stageId) q = q.eq("stage_id", stageId);
   if (category) q = q.eq("category", category);
   const { data, error } = await q;
   if (error) throw error;
-  return data as Resource[];
+  return data as unknown as Resource[];
 }
 
 // Admin-only writes (RLS-enforced).
@@ -311,6 +315,7 @@ export type ResourceFields = {
   author: string | null;
   purchase_link: string | null;
   stage_id: string | null;
+  video_url: string | null;
 };
 
 export async function createResource(
@@ -339,6 +344,19 @@ export async function deleteResource(id: string): Promise<void> {
     .delete()
     .eq("id", id);
   if (error) throw error;
+}
+
+// Upload a lesson video to the resource-videos bucket and return its
+// public URL. Call BEFORE writing the resource row so a failed upload
+// never leaves a row pointing at nothing.
+export async function uploadResourceVideo(file: File): Promise<string> {
+  const path = `videos/${Date.now()}-${file.name}`;
+  const { error } = await supabase.storage
+    .from("resource-videos")
+    .upload(path, file, { contentType: file.type || undefined });
+  if (error) throw error;
+  return supabase.storage.from("resource-videos").getPublicUrl(path)
+    .data.publicUrl;
 }
 
 // ===== Student-resource assignment =====
