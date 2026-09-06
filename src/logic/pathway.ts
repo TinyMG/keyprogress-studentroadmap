@@ -83,3 +83,87 @@ export function isEdgeLit(
 ): boolean {
   return PATHWAY_EDGES.some(([, to]) => to === toId) && !view[toId].locked;
 }
+
+// ===== Admin-added (DB) nodes =====
+
+// Minimal row shape from the pathway_nodes table (structural typing
+// keeps this pure - no supabase import).
+export type CustomNodeRow = {
+  id: string;
+  label: string;
+  parent_id: string;
+  category: string | null;
+  sub_skills: string[];
+  resource_name: string | null;
+};
+
+const COL_GAP = 170; // custom nodes sit one column right of parent
+const ROW_GAP = 100; // siblings / collision probes stack downward
+
+function collides(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return Math.abs(a.x - b.x) < 165 && Math.abs(a.y - b.y) < 95;
+}
+
+// ponytail: heuristic placement (right of parent, probe down on
+// collision, flip side near the right edge) - a manual drag editor is
+// the upgrade path if layout gets cramped.
+export function mergePathway(
+  staticNodes: PathwayNode[],
+  staticEdges: [string, string][],
+  canvas: { width: number; height: number },
+  rows: CustomNodeRow[],
+): {
+  nodes: PathwayNode[];
+  edges: [string, string][];
+  canvas: { width: number; height: number };
+} {
+  const byId = new Map(staticNodes.map((n) => [n.id, n]));
+  const nodes = [...staticNodes];
+  const edges = [...staticEdges];
+  let { width, height } = canvas;
+
+  const kids = new Map<string, CustomNodeRow[]>();
+  for (const r of rows) {
+    const list = kids.get(r.parent_id) ?? [];
+    list.push(r);
+    kids.set(r.parent_id, list);
+  }
+
+  for (const [parentId, list] of kids) {
+    const p = byId.get(parentId);
+    if (!p) continue; // unknown parent: hide rather than crash
+    for (const r of list) {
+      const id = `custom:${r.id}`;
+      let x = p.x + COL_GAP;
+      if (x + 80 > width - 20) x = Math.max(80, p.x - COL_GAP);
+      let y = p.y;
+      let tries = 0;
+      while (
+        tries < 8 &&
+        nodes.some((n) => n.id !== id && collides(n, { x, y }))
+      ) {
+        y += ROW_GAP;
+        tries++;
+      }
+      if (y > height - 60) height = y + 60;
+      const node: PathwayNode = {
+        id,
+        kind: "skill",
+        label: r.label,
+        x,
+        y,
+        shape: "rect",
+        track: p.track, // custom nodes inherit the parent's track
+        category: r.category ?? undefined,
+        resourceName: r.resource_name ?? undefined,
+        sub: r.sub_skills.length ? r.sub_skills : undefined,
+        prev: parentId,
+      };
+      nodes.push(node);
+      edges.push([parentId, id]);
+      byId.set(id, node); // enables custom-of-custom chains
+    }
+  }
+
+  return { nodes, edges, canvas: { width, height } };
+}

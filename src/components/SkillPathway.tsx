@@ -5,14 +5,25 @@ import {
   listStudentResources,
   listStages,
   listResources,
+  listPathwayNodes,
+  createPathwayNode,
+  updatePathwayNode,
+  deletePathwayNode,
   type Student,
   type StudentResource,
   type Stage,
   type Resource,
   type MasteryLevel,
+  type PathwayNodeFields,
+  type PathwayNodeRow,
 } from "../lib/supabase";
 import { deriveProgress, type Progress } from "../logic/progress";
-import { derivePathway, nodeVisual, type PathwayViewState } from "../logic/pathway";
+import {
+  derivePathway,
+  nodeVisual,
+  mergePathway,
+  type PathwayViewState,
+} from "../logic/pathway";
 import {
   PATHWAY_NODES,
   PATHWAY_EDGES,
@@ -22,6 +33,7 @@ import {
 import { SERIES_BY_ID } from "../data/books";
 import { errorMessage } from "../lib/error";
 import VideoPlayer from "./VideoPlayer";
+import type { Role } from "../logic/roles";
 
 const STATUS_DOTS: Record<MasteryLevel, string> = {
   "Not Introduced": "bg-slate-400",
@@ -52,12 +64,14 @@ const EDGE_DIM = "#e2e8f0";
 
 type Props = {
   onSelect: (s: Student) => void;
+  role: Role;
 };
 
-export default function SkillPathway({ onSelect }: Props) {
+export default function SkillPathway({ onSelect, role }: Props) {
   const [students, setStudents] = useState<Student[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
+  const [customRows, setCustomRows] = useState<PathwayNodeRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [studentRes, setStudentRes] = useState<StudentResource[]>([]);
@@ -73,15 +87,17 @@ export default function SkillPathway({ onSelect }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const [list, st, res] = await Promise.all([
+      const [list, st, res, rows] = await Promise.all([
         listStudents(),
         listStages(),
         listResources(),
+        listPathwayNodes(),
       ]);
       setStudents(list);
       setStages(st);
       setResources(res);
-      if (list[0]) {
+      setCustomRows(rows);
+      if (list[0] && !selectedId) {
         setSelectedId(list[0].id);
         await loadStudent(list[0]);
       }
@@ -89,6 +105,14 @@ export default function SkillPathway({ onSelect }: Props) {
       setError(errorMessage(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function reloadRows() {
+    try {
+      setCustomRows(await listPathwayNodes());
+    } catch (err) {
+      setError(errorMessage(err));
     }
   }
 
@@ -120,6 +144,14 @@ export default function SkillPathway({ onSelect }: Props) {
   const selected = students.find((s) => s.id === selectedId);
   const series = selected ? SERIES_BY_ID[selected.series_id] : null;
 
+  // static curated tree + admin-added DB nodes
+  const merged = mergePathway(
+    PATHWAY_NODES,
+    PATHWAY_EDGES,
+    PATHWAY_CANVAS,
+    customRows,
+  );
+
   // student's stage number + mastery per resource name
   const stageNumber =
     stages.find((sg) => sg.id === selected?.stage_id)?.stage_number ?? 0;
@@ -130,10 +162,28 @@ export default function SkillPathway({ onSelect }: Props) {
     if (r) masteryByName[r.name] = sr.mastery_level;
   }
 
-  const view = derivePathway(PATHWAY_NODES, stageNumber, masteryByName);
-  const nodesById = new Map(PATHWAY_NODES.map((n) => [n.id, n]));
+  const view = derivePathway(merged.nodes, stageNumber, masteryByName);
+  const nodesById = new Map(merged.nodes.map((n) => [n.id, n]));
   const stageName = (n: PathwayNode) =>
     stages.find((sg) => sg.stage_number === n.stage)?.name ?? n.label;
+
+  async function handleCreateNode(fields: PathwayNodeFields) {
+    await createPathwayNode(fields);
+    await reloadRows();
+  }
+
+  async function handleUpdateNode(
+    id: string,
+    fields: Partial<PathwayNodeFields>,
+  ) {
+    await updatePathwayNode(id, fields);
+    await reloadRows();
+  }
+
+  async function handleDeleteNode(id: string) {
+    await deletePathwayNode(id);
+    await reloadRows();
+  }
 
   return (
     <div className="px-8 py-8">
@@ -195,8 +245,8 @@ export default function SkillPathway({ onSelect }: Props) {
                 <div
                   className="relative mx-auto"
                   style={{
-                    width: PATHWAY_CANVAS.width,
-                    height: PATHWAY_CANVAS.height,
+                    width: merged.canvas.width,
+                    height: merged.canvas.height,
                     backgroundImage:
                       "radial-gradient(circle, #e2e8f0 1px, transparent 1px)",
                     backgroundSize: "24px 24px",
@@ -204,11 +254,11 @@ export default function SkillPathway({ onSelect }: Props) {
                 >
                   <svg
                     className="absolute inset-0"
-                    width={PATHWAY_CANVAS.width}
-                    height={PATHWAY_CANVAS.height}
-                    viewBox={`0 0 ${PATHWAY_CANVAS.width} ${PATHWAY_CANVAS.height}`}
+                    width={merged.canvas.width}
+                    height={merged.canvas.height}
+                    viewBox={`0 0 ${merged.canvas.width} ${merged.canvas.height}`}
                   >
-                    {PATHWAY_EDGES.map(([from, to]) => {
+                    {merged.edges.map(([from, to]) => {
                       const a = nodesById.get(from)!;
                       const b = nodesById.get(to)!;
                       const mx = (a.x + b.x) / 2;
@@ -225,7 +275,7 @@ export default function SkillPathway({ onSelect }: Props) {
                     })}
                   </svg>
 
-                  {PATHWAY_NODES.map((n) => {
+                  {merged.nodes.map((n) => {
                     const v: PathwayViewState = view[n.id];
                     const visual = nodeVisual(v);
                     const base =
@@ -341,7 +391,7 @@ export default function SkillPathway({ onSelect }: Props) {
         )
       )}
 
-      {dialogNode && (
+      {dialogNode && view[dialogNode.id] && (
         <NodeDialog
           node={dialogNode}
           stageName={
@@ -355,6 +405,11 @@ export default function SkillPathway({ onSelect }: Props) {
               )?.video_url) ||
             null
           }
+          isAdmin={role === "admin"}
+          resources={resources}
+          onCreate={handleCreateNode}
+          onUpdate={handleUpdateNode}
+          onDelete={handleDeleteNode}
           onClose={() => setDialogNode(null)}
         />
       )}
@@ -392,14 +447,74 @@ function NodeDialog({
   stageName,
   view,
   videoUrl,
+  isAdmin,
+  resources,
+  onCreate,
+  onUpdate,
+  onDelete,
   onClose,
 }: {
   node: PathwayNode;
   stageName?: string;
   view: PathwayViewState;
   videoUrl?: string | null;
+  isAdmin: boolean;
+  resources: Resource[];
+  onCreate: (fields: PathwayNodeFields) => Promise<void>;
+  onUpdate: (
+    id: string,
+    fields: Partial<PathwayNodeFields>,
+  ) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
   onClose: () => void;
 }) {
+  const isCustom = node.id.startsWith("custom:");
+  const [mode, setMode] = useState<null | "add" | "edit">(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(fields: {
+    label: string;
+    category: string;
+    subSkills: string[];
+    resourceName: string;
+  }) {
+    setBusy(true);
+    setError(null);
+    try {
+      const fields2: PathwayNodeFields = {
+        label: fields.label,
+        parent_id: node.id,
+        category: fields.category || null,
+        sub_skills: fields.subSkills,
+        resource_name: fields.resourceName || null,
+      };
+      if (mode === "add") {
+        await onCreate(fields2);
+      } else {
+        await onUpdate(node.id.slice("custom:".length), fields2);
+      }
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm(`Delete "${node.label}" from the pathway?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onDelete(node.id.slice("custom:".length));
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
@@ -469,7 +584,175 @@ function NodeDialog({
             <VideoPlayer url={videoUrl} />
           </div>
         )}
+
+        {isAdmin && !mode && (
+          <div className="mt-4 flex gap-4 border-t border-slate-100 pt-3">
+            {!isCustom && (
+              <button
+                onClick={() => setMode("add")}
+                className="text-sm font-medium text-brand-600 hover:underline"
+              >
+                + Add skill here
+              </button>
+            )}
+            {isCustom && (
+              <>
+                <button
+                  onClick={() => setMode("edit")}
+                  className="text-sm font-medium text-brand-600 hover:underline"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={remove}
+                  disabled={busy}
+                  className="text-sm font-medium text-red-500 hover:underline"
+                >
+                  Delete
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {mode && (
+          <NodeForm
+            resources={resources}
+            initial={
+              mode === "edit"
+                ? {
+                    label: node.label,
+                    category: node.category ?? "",
+                    subSkills: node.sub ?? [],
+                    resourceName: node.resourceName ?? "",
+                  }
+                : undefined
+            }
+            busy={busy}
+            onSubmit={save}
+            onCancel={() => setMode(null)}
+          />
+        )}
+
+        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       </div>
     </div>
+  );
+}
+
+function NodeForm({
+  resources,
+  initial,
+  busy,
+  onSubmit,
+  onCancel,
+}: {
+  resources: Resource[];
+  initial?: {
+    label: string;
+    category: string;
+    subSkills: string[];
+    resourceName: string;
+  };
+  busy: boolean;
+  onSubmit: (fields: {
+    label: string;
+    category: string;
+    subSkills: string[];
+    resourceName: string;
+  }) => void;
+  onCancel: () => void;
+}) {
+  const [label, setLabel] = useState(initial?.label ?? "");
+  const [category, setCategory] = useState(initial?.category ?? "");
+  const [subSkillsText, setSubSkillsText] = useState(
+    initial?.subSkills.join("\n") ?? "",
+  );
+  const [resourceName, setResourceName] = useState(
+    initial?.resourceName ?? "",
+  );
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit({
+          label: label.trim(),
+          category: category.trim(),
+          subSkills: subSkillsText
+            .split("\n")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          resourceName,
+        });
+      }}
+      className="mt-3 space-y-2 border-t border-slate-100 pt-3"
+    >
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-500">
+          Skill name
+        </label>
+        <input
+          required
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-500">
+          Bound resource (drives mastery + videos)
+        </label>
+        <select
+          value={resourceName}
+          onChange={(e) => setResourceName(e.target.value)}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+        >
+          <option value="">— None —</option>
+          {resources.map((r) => (
+            <option key={r.id} value={r.name}>
+              {r.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-500">
+          Category (optional)
+        </label>
+        <input
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-500">
+          Skills covered (one per line)
+        </label>
+        <textarea
+          rows={3}
+          value={subSkillsText}
+          onChange={(e) => setSubSkillsText(e.target.value)}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+        />
+      </div>
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }

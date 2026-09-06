@@ -99,7 +99,9 @@ export default function App() {
           />
         )}
         {view === "curriculum" && <Curriculum />}
-        {view === "roadmap" && <SkillPathway onSelect={openStudent} />}
+        {view === "roadmap" && (
+          <SkillPathway onSelect={openStudent} role={role} />
+        )}
         {view === "resources" && <ResourcesPage />}
         {view === "admin" && role === "admin" && <AdminPage />}
       </main>

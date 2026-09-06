@@ -359,6 +359,66 @@ export async function uploadResourceVideo(file: File): Promise<string> {
     .data.publicUrl;
 }
 
+// ===== Custom skill-pathway nodes (admin-curated) =====
+
+export type PathwayNodeRow = {
+  id: string;
+  label: string;
+  parent_id: string;
+  category: string | null;
+  sub_skills: string[];
+  resource_name: string | null;
+  created_at: string;
+};
+
+export type PathwayNodeFields = {
+  label: string;
+  parent_id: string;
+  category: string | null;
+  sub_skills: string[];
+  resource_name: string | null;
+};
+
+export async function listPathwayNodes(): Promise<PathwayNodeRow[]> {
+  const { data, error } = await supabase
+    .from("pathway_nodes")
+    .select(
+      "id, label, parent_id, category, sub_skills, resource_name, " +
+        "created_at",
+    )
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data as unknown as PathwayNodeRow[];
+}
+
+export async function createPathwayNode(
+  fields: PathwayNodeFields,
+): Promise<void> {
+  const { error } = await supabase
+    .from("pathway_nodes")
+    .insert(fields);
+  if (error) throw error;
+}
+
+export async function updatePathwayNode(
+  id: string,
+  fields: Partial<PathwayNodeFields>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("pathway_nodes")
+    .update(fields)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deletePathwayNode(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("pathway_nodes")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
 // ===== Student-resource assignment =====
 
 export async function listStudentResources(

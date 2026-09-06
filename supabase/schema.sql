@@ -397,3 +397,24 @@ drop policy if exists "videos authed upload" on storage.objects;
 create policy "videos authed upload" on storage.objects
   for insert to authenticated
   with check (bucket_id = 'resource-videos');
+
+-- ===== Custom skill-pathway nodes (admin-curated) =====
+-- parent_id references a static pathway node id (e.g. 'tech1') or
+-- another custom row's uuid (string, not FK - static ids live in code).
+create table if not exists pathway_nodes (
+  id uuid primary key default gen_random_uuid(),
+  label text not null,
+  parent_id text not null,
+  category text,
+  sub_skills text[] not null default '{}',
+  resource_name text,
+  created_at timestamptz not null default now()
+);
+
+alter table pathway_nodes enable row level security;
+drop policy if exists "pathway_nodes read all" on pathway_nodes;
+create policy "pathway_nodes read all" on pathway_nodes
+  for select using (auth.uid() is not null);
+drop policy if exists "pathway_nodes admin write" on pathway_nodes;
+create policy "pathway_nodes admin write" on pathway_nodes
+  for all using (is_admin()) with check (is_admin());
