@@ -10,7 +10,18 @@ if (!url || !anon) {
   console.warn("KeyProgress: missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY");
 }
 
-export const supabase = createClient(url ?? "", anon ?? "");
+// A placeholder/invalid URL would throw inside createClient and blank the
+// whole app; fall back to a dummy client so the UI still renders (and every
+// query fails loudly) instead of a white screen.
+function makeClient() {
+  if (url && /^https?:\/\//.test(url)) {
+    return createClient(url, anon ?? "");
+  }
+  console.error("KeyProgress: invalid VITE_SUPABASE_URL — check .env");
+  return createClient("http://localhost", "invalid");
+}
+
+export const supabase = makeClient();
 
 // ===== Types =====
 
@@ -368,6 +379,8 @@ export type PathwayNodeRow = {
   category: string | null;
   sub_skills: string[];
   resource_name: string | null;
+  dx: number;
+  dy: number;
   created_at: string;
 };
 
@@ -384,7 +397,7 @@ export async function listPathwayNodes(): Promise<PathwayNodeRow[]> {
     .from("pathway_nodes")
     .select(
       "id, label, parent_id, category, sub_skills, resource_name, " +
-        "created_at",
+        "dx, dy, created_at",
     )
     .order("created_at", { ascending: true });
   if (error) throw error;
@@ -415,6 +428,19 @@ export async function deletePathwayNode(id: string): Promise<void> {
   const { error } = await supabase
     .from("pathway_nodes")
     .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// Persist a drag-to-nudge offset (from the auto-placed position).
+export async function setNodePosition(
+  id: string,
+  dx: number,
+  dy: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from("pathway_nodes")
+    .update({ dx, dy })
     .eq("id", id);
   if (error) throw error;
 }

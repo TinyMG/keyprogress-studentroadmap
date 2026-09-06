@@ -95,4 +95,24 @@ const view2 = derivePathway(merged.nodes, 4, {});
 assert.equal(view2["custom:u1"].status, "Not Introduced");
 assert.equal(view2["custom:u1"].locked, true);
 
+// Drag offsets: position = auto position + (dx, dy), probe skipped.
+const auto = mergePathway(PATHWAY_NODES, PATHWAY_EDGES, PATHWAY_CANVAS, [
+  row({}),
+]);
+const autoChild = auto.nodes.find((n) => n.id === "custom:u1")!;
+const nudged = mergePathway(PATHWAY_NODES, PATHWAY_EDGES, PATHWAY_CANVAS, [
+  row({ dx: 10, dy: -30 }),
+]);
+const nudgedChild = nudged.nodes.find((n) => n.id === "custom:u1")!;
+assert.equal(nudgedChild.x, autoChild.x + 10);
+assert.equal(nudgedChild.y, autoChild.y - 30);
+
+// A dragged node can sit where auto-layout would have probed away:
+// huge negative dy is kept as-is.
+const parked = mergePathway(PATHWAY_NODES, PATHWAY_EDGES, PATHWAY_CANVAS, [
+  row({ dy: -500 }),
+]);
+const parkedChild = parked.nodes.find((n) => n.id === "custom:u1")!;
+assert.equal(parkedChild.y, autoChild.y - 500);
+
 console.log("pathwayCustom.test: all assertions passed");

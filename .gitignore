@@ -21,3 +21,4 @@ Thumbs.db
 # supabase local
 supabase/.branches
 supabase/.temp
+.playwright-mcp/

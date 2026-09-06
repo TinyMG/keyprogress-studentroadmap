@@ -418,3 +418,8 @@ create policy "pathway_nodes read all" on pathway_nodes
 drop policy if exists "pathway_nodes admin write" on pathway_nodes;
 create policy "pathway_nodes admin write" on pathway_nodes
   for all using (is_admin()) with check (is_admin());
+
+-- Drag-to-nudge offsets from the auto-placed position (admin drags a
+-- custom node; 0,0 = auto layout).
+alter table pathway_nodes add column if not exists dx int not null default 0;
+alter table pathway_nodes add column if not exists dy int not null default 0;

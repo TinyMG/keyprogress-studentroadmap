@@ -95,6 +95,8 @@ export type CustomNodeRow = {
   category: string | null;
   sub_skills: string[];
   resource_name: string | null;
+  dx?: number; // drag-to-nudge offset from the auto position
+  dy?: number;
 };
 
 const COL_GAP = 170; // custom nodes sit one column right of parent
@@ -134,6 +136,10 @@ export function mergePathway(
     if (!p) continue; // unknown parent: hide rather than crash
     for (const r of list) {
       const id = `custom:${r.id}`;
+      const dx = r.dx ?? 0;
+      const dy = r.dy ?? 0;
+      // Auto position first (flip + collision probe), so a drag delta
+      // is relative to where the node was actually rendered.
       let x = p.x + COL_GAP;
       if (x + 80 > width - 20) x = Math.max(80, p.x - COL_GAP);
       let y = p.y;
@@ -145,6 +151,8 @@ export function mergePathway(
         y += ROW_GAP;
         tries++;
       }
+      x += dx;
+      y += dy;
       if (y > height - 60) height = y + 60;
       const node: PathwayNode = {
         id,

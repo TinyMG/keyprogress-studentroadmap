@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   listStudents,
   listCompletedBooks,
@@ -9,6 +9,7 @@ import {
   createPathwayNode,
   updatePathwayNode,
   deletePathwayNode,
+  setNodePosition,
   type Student,
   type StudentResource,
   type Stage,
@@ -79,6 +80,24 @@ export default function SkillPathway({ onSelect, role }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Drag-to-nudge (admin, custom nodes only): live overrides during a
+  // drag, persisted to dx/dy on drop.
+  const [overrides, setOverrides] = useState<
+    Record<string, { dx: number; dy: number }>
+  >({});
+  const dragRef = useRef<{
+    rowId: string;
+    startX: number;
+    startY: number;
+    baseDx: number;
+    baseDy: number;
+    dx: number;
+    dy: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressClickRef = useRef(false);
+  const [dragError, setDragError] = useState<string | null>(null);
+
   useEffect(() => {
     void load();
   }, []);
@@ -144,12 +163,15 @@ export default function SkillPathway({ onSelect, role }: Props) {
   const selected = students.find((s) => s.id === selectedId);
   const series = selected ? SERIES_BY_ID[selected.series_id] : null;
 
-  // static curated tree + admin-added DB nodes
+  // static curated tree + admin-added DB nodes (with live drag offsets)
   const merged = mergePathway(
     PATHWAY_NODES,
     PATHWAY_EDGES,
     PATHWAY_CANVAS,
-    customRows,
+    customRows.map((r) => {
+      const o = overrides[r.id];
+      return o ? { ...r, dx: o.dx, dy: o.dy } : r;
+    }),
   );
 
   // student's stage number + mastery per resource name
@@ -183,6 +205,53 @@ export default function SkillPathway({ onSelect, role }: Props) {
   async function handleDeleteNode(id: string) {
     await deletePathwayNode(id);
     await reloadRows();
+  }
+
+  function startDrag(e: React.PointerEvent, n: PathwayNode) {
+    if (role !== "admin" || !n.id.startsWith("custom:")) return;
+    const rowId = n.id.slice("custom:".length);
+    const o = overrides[rowId];
+    dragRef.current = {
+      rowId,
+      startX: e.clientX,
+      startY: e.clientY,
+      baseDx: o?.dx ?? 0,
+      baseDy: o?.dy ?? 0,
+      dx: 0,
+      dy: 0,
+      moved: false,
+    };
+    suppressClickRef.current = false;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function moveDrag(e: React.PointerEvent) {
+    const d = dragRef.current;
+    if (!d) return;
+    const rawDx = e.clientX - d.startX;
+    const rawDy = e.clientY - d.startY;
+    if (!d.moved && Math.abs(rawDx) + Math.abs(rawDy) < 5) return;
+    d.moved = true;
+    // Snap to the 24px canvas dot grid (also keeps dx/dy integral for
+    // the integer DB columns).
+    d.dx = d.baseDx + Math.round(rawDx / 24) * 24;
+    d.dy = d.baseDy + Math.round(rawDy / 24) * 24;
+    setOverrides((o) => ({
+      ...o,
+      [d.rowId]: { dx: d.dx, dy: d.dy },
+    }));
+  }
+
+  function endDrag() {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d?.moved) return;
+    suppressClickRef.current = true;
+    setNodePosition(d.rowId, d.dx, d.dy).catch((err) => {
+      setDragError(errorMessage(err));
+      // revert to the auto position on failure
+      setOverrides(({ [d.rowId]: _drop, ...rest }) => rest);
+    });
   }
 
   return (
@@ -242,6 +311,17 @@ export default function SkillPathway({ onSelect, role }: Props) {
             <div className="flex flex-col gap-6 xl:flex-row">
               {/* tree canvas */}
               <div className="min-w-0 flex-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-4">
+                {dragError && (
+                  <div className="mb-3 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-2">
+                    <p className="text-sm text-red-600">{dragError}</p>
+                    <button
+                      onClick={() => setDragError(null)}
+                      className="text-xs text-red-400 hover:underline"
+                    >
+                      dismiss
+                    </button>
+                  </div>
+                )}
                 <div
                   className="relative mx-auto"
                   style={{
@@ -288,9 +368,23 @@ export default function SkillPathway({ onSelect, role }: Props) {
                       <button
                         key={n.id}
                         type="button"
-                        onClick={() => setDialogNode(n)}
+                        onClick={() => {
+                          if (suppressClickRef.current) {
+                            suppressClickRef.current = false;
+                            return;
+                          }
+                          setDialogNode(n);
+                        }}
+                        onPointerDown={(e) => startDrag(e, n)}
+                        onPointerMove={moveDrag}
+                        onPointerUp={endDrag}
+                        onPointerCancel={endDrag}
                         style={{ left: n.x, top: n.y }}
-                        className={`${base} ${shape} ${NODE_STYLE[visual]}`}
+                        className={`${base} ${shape} ${NODE_STYLE[visual]}${
+                          role === "admin" && n.id.startsWith("custom:")
+                            ? " cursor-move touch-none"
+                            : ""
+                        }`}
                         aria-label={`${n.label} — ${v.status}${v.locked ? " (locked)" : ""}`}
                       >
                         {v.locked ? (
